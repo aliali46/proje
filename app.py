@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/usr/bin
 # -*- coding: utf-8 -*-
 """Proje Yönetim Sistemi — GitHub geliştirme tabanı.
 
