@@ -1,18 +1,6 @@
-#!/usr/bin
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""Proje Yönetim Sistemi — GitHub geliştirme tabanı.
-
-Tek dosyalı, çevrimdışı çalışabilen proje/sistem takip uygulaması.
-Teknik temel: Python standart kütüphanesi + SQLite; harici Python paketi gerekmez.
-
-Geliştirme notları:
-- Veritabanı ve yüklemeler DATA_DIR / UPLOAD_DIR içinde tutulur.
-- İlk kullanıcı bilgileri ortam değişkenleriyle özelleştirilebilir.
-- Varsayılan demo parolaları yalnızca yerel ilk kurulum içindir; canlı kullanımda
-  uygulamayı açmadan önce ADMIN_PASSWORD ve VIEWER_PASSWORD ayarlayın.
-- Sunum ekranındaki akış animasyonları görsel sunum öğeleridir; gerçek telemetri
-  verisi olarak yorumlanmamalıdır.
-"""
+"""Proje Yönetim Sistemi v6.0.0 - tamamen offline, Python stdlib + SQLite."""
 import os,io,csv,html,sqlite3,hashlib,secrets,mimetypes,traceback,json,re
 from datetime import datetime
 from http.server import BaseHTTPRequestHandler,ThreadingHTTPServer
@@ -20,14 +8,7 @@ from urllib.parse import urlparse,parse_qs,quote
 from email import policy
 from email.parser import BytesParser
 
-APP_VERSION='6.2.3'
-HOST=os.getenv('HOST','0.0.0.0')
-PORT=int(os.getenv('PORT','8080'))
-DEFAULT_ADMIN_USERNAME=os.getenv('ADMIN_USERNAME','admin')
-DEFAULT_ADMIN_PASSWORD=os.getenv('ADMIN_PASSWORD','admin123!')
-DEFAULT_VIEWER_USERNAME=os.getenv('VIEWER_USERNAME','izleyici')
-DEFAULT_VIEWER_PASSWORD=os.getenv('VIEWER_PASSWORD','izleyici123!')
-COOKIE_SECURE=os.getenv('COOKIE_SECURE','0').strip().lower() in ('1','true','yes','on')
+APP_VERSION='6.2.3'; HOST=os.getenv('HOST','0.0.0.0'); PORT=int(os.getenv('PORT','8080'))
 DATA_DIR=os.getenv('DATA_DIR','/app/data'); UPLOAD_DIR=os.getenv('UPLOAD_DIR','/app/uploads'); DB_PATH=os.path.join(DATA_DIR,'projects.db'); APP_DIR=os.path.dirname(os.path.abspath(__file__)); STATIC_MAP_DIR=os.path.join(APP_DIR,'static','maps')
 MAX_UPLOAD=50*1024*1024
 os.makedirs(DATA_DIR,exist_ok=True); os.makedirs(UPLOAD_DIR,exist_ok=True)
@@ -70,7 +51,7 @@ def init():
  c=db(); c.executescript(SCHEMA)
  c.execute("INSERT OR IGNORE INTO schema_version(version) VALUES(1)")
  if not c.execute('SELECT 1 FROM users LIMIT 1').fetchone():
-  t=now(); c.execute('INSERT INTO users(username,password_hash,role,created_at,updated_at) VALUES(?,?,?,?,?)',(DEFAULT_ADMIN_USERNAME,hashpw(DEFAULT_ADMIN_PASSWORD),'admin',t,t)); c.execute('INSERT INTO users(username,password_hash,role,created_at,updated_at) VALUES(?,?,?,?,?)',(DEFAULT_VIEWER_USERNAME,hashpw(DEFAULT_VIEWER_PASSWORD),'readonly',t,t))
+  t=now(); c.execute('INSERT INTO users(username,password_hash,role,created_at,updated_at) VALUES(?,?,?,?,?)',('admin',hashpw('admin123!'),'admin',t,t)); c.execute('INSERT INTO users(username,password_hash,role,created_at,updated_at) VALUES(?,?,?,?,?)',('izleyici',hashpw('izleyici123!'),'readonly',t,t))
  defaults={'theme':'light','map_type':'XYZ','map_url':'','map_name':'Yerel Harita Sunucusu','map_layer':'','map_format':'image/png','map_version':'1.3.0','map_zoom':'6','map_center_lat':'39.0','map_center_lon':'35.0','map_min_zoom':'2','map_max_zoom':'18'}
  for k,v in defaults.items(): c.execute('INSERT OR IGNORE INTO settings(key,value) VALUES(?,?)',(k,v))
  # Backfill a baseline history entry for systems created before status history existed.
@@ -150,7 +131,7 @@ function mapZoom(d){PYSMap.zoom(d)}function mapReset(){PYSMap.reset()}function e
 '''
 
 def login(msg=''):
- return page('Giriş',f'''<div class="card login"><div class="logo">Proje Yönetim</div><p class="muted">Yerel / offline yönetim sistemi</p>{f'<div class="err">{h(msg)}</div>' if msg else ''}<form method="post" action="/login"><label>Kullanıcı adı</label><input name="username" autofocus required><label>Şifre</label><input type="password" name="password" required><div class="actions"><button class="btn">Giriş Yap</button></div></form><p class="small muted">İlk kurulum bilgileri dağıtım ortamının yapılandırmasına bağlıdır.</p></div>''')
+ return page('Giriş',f'''<div class="card login"><div class="logo">Proje Yönetim</div><p class="muted">Yerel / offline yönetim sistemi</p>{f'<div class="err">{h(msg)}</div>' if msg else ''}<form method="post" action="/login"><label>Kullanıcı adı</label><input name="username" autofocus required><label>Şifre</label><input type="password" name="password" required><div class="actions"><button class="btn">Giriş Yap</button></div></form><p class="small muted">İlk kurulum: admin / admin123! · izleyici / izleyici123!</p></div>''')
 
 def project_form(p=None,user=None):
  p=p or {}; edit=bool(p)
@@ -330,7 +311,7 @@ class H(BaseHTTPRequestHandler):
     if not x:return self.out('Bulunamadı',404)
     data=open(os.path.join(UPLOAD_DIR,x['filename']),'rb').read();self.send_response(200);self.send_header('Content-Type',x['mime_type'] or 'image/jpeg');self.send_header('Content-Disposition','inline');self.send_header('Content-Length',str(len(data)));self.end_headers();return self.wfile.write(data)
    if path=='/logout':
-    sid=cookie(self.headers,'sid');SESSIONS.pop(sid,None);return self.redir('/login',['sid=; Path=/; Max-Age=0; HttpOnly; SameSite=Lax'+('; Secure' if COOKIE_SECURE else '')])
+    sid=cookie(self.headers,'sid');SESSIONS.pop(sid,None);return self.redir('/login',['sid=; Path=/; Max-Age=0; HttpOnly'])
    return self.out('Bulunamadı',404)
   except PermissionError as e:return self.redir('/login')
   except Exception as e:traceback.print_exc();return self.out(page('Hata',f'<div class="err">{h(e)}</div>'),500)
@@ -339,7 +320,7 @@ class H(BaseHTTPRequestHandler):
    path=urlparse(self.path).path;body=self.body();ct=self.headers.get('Content-Type','')
    if path=='/login':
     f=form(body);c=db();u=c.execute('SELECT * FROM users WHERE username=?',(f.get('username',''),)).fetchone();c.close()
-    if u and verifypw(f.get('password',''),u['password_hash']):sid=secrets.token_urlsafe(32);SESSIONS[sid]=u['id'];cookie=f'sid={sid}; Path=/; HttpOnly; SameSite=Lax'+('; Secure' if COOKIE_SECURE else '');return self.redir('/',[cookie])
+    if u and verifypw(f.get('password',''),u['password_hash']):sid=secrets.token_urlsafe(32);SESSIONS[sid]=u['id'];return self.redir('/',[f'sid={sid}; Path=/; HttpOnly; SameSite=Lax'])
     return self.out(login('Kullanıcı adı veya şifre hatalı.'),401)
    u=need(self.headers,True)
    if path=='/theme':
